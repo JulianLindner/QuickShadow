@@ -1,12 +1,12 @@
 #/***************************************************************************
-# ShadowGenerator
+# QuickShadow
 #
 # This plugin creates shadows from Polygons
 #							 -------------------
 #		begin				: 2025-12-05
 #		git sha				: $Format:%H$
 #		copyright			: (C) 2025 by Julian Lindner
-#		email				: shadow@julianlindner.de
+#		email				: QuickShadow@julianlindner.de
 # ***************************************************************************/
 #
 #/***************************************************************************
@@ -38,13 +38,13 @@ LOCALES =
 # translation
 SOURCES = \
 	__init__.py \
-	shadow_generator.py 
+	QuickShadow.py 
 
-PLUGINNAME = shadow_generator
+PLUGINNAME = QuickShadow
 
 PY_FILES = \
 	__init__.py \
-	shadow_generator.py 
+	QuickShadow.py 
 
 UI_FILES = 
 
