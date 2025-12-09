@@ -43,7 +43,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterField,
                        QgsApplication,
                        QgsProcessingUtils,
-                       QgsProject)
+                       QgsProcessingParameterBoolean)
 from qgis import utils
 
 
@@ -52,10 +52,13 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
     # Constants
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
+    HEIGHT_DIFFERENCE_OUTPUT = 'HEIGHT_DIFFERENCE_OUTPUT'
     DEFAULT_HEIGHT_FIELD_NAME = 'default_height_value'
     HEIGHT_FIELD = 'HEIGHT_FIELD'
     SHADOW_ANGLE = 'SHADOW_ANGLE' 
     SHADOW_LENGTH_FACTOR = 'SHADOW_LENGTH_FACTOR'
+    HEIGHT_DIFFERENCE_FIELD = 'HEIGHT_DIFF'
+    RUN_HEIGHT_DIFFERENCE = 'RUN_HEIGHT_DIFFERENCE'
 
     def initAlgorithm(self, config):
         """
@@ -108,6 +111,23 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT,
                 self.tr('Output layer')
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.RUN_HEIGHT_DIFFERENCE,
+                self.tr('Calculate Cast Shadows on other objects (computationally intensive)'),
+                defaultValue=False
+            )
+        )
+
+        # Create FeatureSink for the filtered output
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.HEIGHT_DIFFERENCE_OUTPUT,
+                self.tr('Shadows on Lower Buildings (Optional Output)'),
+                optional=True
             )
         )
 
@@ -185,10 +205,6 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
 
 
     def _post_process_layer(self, parameters, context, feedback, output_layer):
-        """
-        Applies grey styling to the shadow layer and attempts to move it 
-        below the original input layer in the layer tree.
-        """
         # --- 1. Apply Styling ---
         single_symbol_renderer = output_layer.renderer()
         symbol = single_symbol_renderer.symbol()
@@ -203,43 +219,96 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         if utils.iface:
             utils.iface.layerTreeView().refreshLayerSymbology(output_layer.id())
 
+    def _run_height_difference_calculation(self, parameters, context, feedback, shadow_layer_id):
+        
+        height_field_name = self.parameterAsString(parameters, self.HEIGHT_FIELD, context)
+        
+        # Only proceed with the join and calculation if a height field is defined
+        if height_field_name == self.DEFAULT_HEIGHT_FIELD_NAME:
+            feedback.pushWarning("Skipping height difference calculation: Requires a primary height field.")
+            return shadow_layer_id, None # Return main ID and None for the secondary output
+        
+        # --- A. Spatial Join (Join Attributes by Location) ---
+        # ... (same as before) ...
+        feedback.pushInfo("Step A: Running Spatial Join using INPUT layer as comparison...")
 
-        # --- 2. Adjust Layer Ordering ---
-        original_layer = QgsProcessingUtils.mapLayerFromString(
-            parameters[self.INPUT], 
-            context
+        join_params = {
+            'INPUT': shadow_layer_id,
+            'JOIN': parameters[self.INPUT],
+            'PREDICATE': [0],
+            'JOIN_FIELDS': [height_field_name],
+            'METHOD': 0,
+            'DISCARD_NON_MATCHING': True,
+            'PREFIX': 'comp_',
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+
+        join_result = QgsApplication.processingRegistry().algorithmById('qgis:joinattributesbylocation').run(
+           join_params, context, feedback
         )
-
-        if original_layer:
-            root = QgsProject.instance().layerTreeRoot()
-            original_layer_node = root.findLayer(original_layer.id())
-            new_layer_node = root.findLayer(output_layer.id())
+        
+        if join_result is None or 'OUTPUT' not in join_result[0]:
+            feedback.reportError("Failed to execute Spatial Join.", True)
+            return shadow_layer_id, None
             
-            if original_layer_node and new_layer_node:
-                parent_group = original_layer_node.parent()
-                
-                if parent_group:
-                    try:
-                        # Find the index of the original layer
-                        original_layer_index = parent_group.children().index(original_layer_node)
-                        
-                        # Remove and insert the new layer node below the original (index + 1)
-                        parent_group.removeChildNode(new_layer_node)
-                        parent_group.insertChildNode(
-                            original_layer_index + 1, 
-                            new_layer_node.clone()
-                        )
-                        feedback.pushInfo(f"Moved new layer '{output_layer.name()}' below '{original_layer.name()}' successfully.")
+        joined_layer_id = join_result[0]['OUTPUT']
+        
+        # --- B. Field Calculator ---
+        # Calculate the difference: Caster_Height - Receiver_Height
+        # ... (same as before) ...
+        feedback.pushInfo("Step B: Calculating Height Difference (HEIGHT_DIFF)...")
+        
+        joined_field_name = f'comp_{height_field_name}'
+        difference_expression = f"\"{height_field_name}\" - \"{joined_field_name}\""
+        
+        calc_params = {
+            'INPUT': joined_layer_id,
+            'FIELD_NAME': self.HEIGHT_DIFFERENCE_FIELD,
+            'FIELD_TYPE': 0, 
+            'FIELD_LENGTH': 10,
+            'FIELD_PRECISION': 2,
+            'FORMULA': difference_expression,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        
+        calc_result = QgsApplication.processingRegistry().algorithmById('qgis:fieldcalculator').run(
+           calc_params, context, feedback
+        )
+        
+        if calc_result is None or 'OUTPUT' not in calc_result[0]:
+            feedback.reportError("Failed to execute Field Calculator.", True)
+            return shadow_layer_id, None
 
-                    except ValueError:
-                         feedback.pushWarning("Original layer found, but its position index could not be determined. Order not adjusted.")
-                else:
-                    feedback.pushWarning("Original layer node has no parent. Cannot adjust order.")
-            else:
-                feedback.pushWarning(f"Could not find the layer nodes in the layer tree. Order not adjusted.")
-        else:
-            feedback.pushWarning("Could not retrieve original input layer object. Order not adjusted.")
+        final_layer_id = calc_result[0]['OUTPUT']
+        
+        # --- C. Select and Filter Features (Optional Output) ---
+        filtered_layer_id = None
+        
+        # Check if the user defined an optional output sink for filtered results
+        if self.parameterAsOutputLayer(parameters, self.HEIGHT_DIFFERENCE_OUTPUT) is not None:
+            feedback.pushInfo("Step C: Filtering features where Caster > Receiver (HEIGHT_DIFF > 0)...")
+            
+            # Select features where HEIGHT_DIFF is greater than 0
+            filter_params = {
+                'INPUT': final_layer_id,
+                'EXPRESSION': f"\"{self.HEIGHT_DIFFERENCE_FIELD}\" > 0",
+                'METHOD': 0, # Create subset
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+            }
+            
+            filter_result = QgsApplication.processingRegistry().algorithmById('qgis:selectbyexpression').run(
+               filter_params, context, feedback
+            )
+            
+            if filter_result is None or 'OUTPUT' not in filter_result[0]:
+                feedback.reportError("Failed to execute Select by Expression.", True)
+                return shadow_layer_id, None
+            
+            filtered_layer_id = filter_result[0]['OUTPUT']
 
+        # Returns the ID of the layer containing ALL joined/calculated features (for the main output)
+        # and the ID of the layer containing only the filtered features (for the secondary output).
+        return final_layer_id, filtered_layer_id
 
 # ----------------------------------------------------------------------
 ## Main Processing Method
@@ -257,7 +326,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         # 2. Determine the height value expression (e.g., "Field_Name" or "1.0")
         height_value_expression = self._get_height_expression(parameters, context, feedback)
             
-        # 3. Run the 'Geometry by Expression' processing algorithm
+        # 3. Run the 'Geometry by Expression' processing algorithm to get raw shadows
         temp_output_id = self._run_geometry_by_expression(
             parameters, 
             context, 
@@ -268,40 +337,79 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         if temp_output_id is None:
             return {} # Failure occurred in the sub-algorithm
 
-        # 4. Retrieve the temporary result layer
-        temp_result_layer = context.getMapLayer(temp_output_id)
+        # --- NEW LOGIC: Conditional Execution ---
+        run_height_diff = self.parameterAsBoolean(parameters, self.RUN_HEIGHT_DIFFERENCE, context)
+        
+        processed_layer_id = temp_output_id
+        filtered_layer_id = None
+        
+        if run_height_diff:
+            feedback.pushInfo("Option 'Calculate Cast Shadows' is ON. Running height difference calculation...")
+            
+            # 4. Calculate Overlap, Height Difference, and perform Filtering
+            # processed_layer_id holds the layer with ALL features + HEIGHT_DIFF
+            # filtered_layer_id holds the layer with ONLY features where Caster > Receiver
+            processed_layer_id, filtered_layer_id = self._run_height_difference_calculation(
+                parameters, 
+                context, 
+                feedback, 
+                temp_output_id
+            )
+            
+            if processed_layer_id is None:
+                return {} # Failure in calculation step
+        else:
+            feedback.pushInfo("Option 'Calculate Cast Shadows' is OFF. Skipping complex intersection calculation.")
+        # --- END NEW LOGIC ---
+        
+        # 5. Handle the MAIN Output (All Shadows. With or without HEIGHT_DIFF field)
+        temp_result_layer = context.getMapLayer(processed_layer_id)
 
-        if temp_result_layer is None:
-            feedback.reportError("Could not retrieve temporary result layer.", True)
-            return {}
-
-        # 5. Copy features from the temporary layer to the final output sink
         # Prepare the final output sink
-        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
+        (sink_main, dest_id_main) = self.parameterAsSink(parameters, self.OUTPUT,
                 context, temp_result_layer.fields(), temp_result_layer.wkbType(), temp_result_layer.sourceCrs())
         
-        features = temp_result_layer.getFeatures()
-        feature_count = temp_result_layer.featureCount()
-        total = 100.0 / feature_count if feature_count else 0
+        # Copy features from the calculated layer to the main sink
+        feedback.pushInfo("Copying features to the Main Output layer...")
+        features_main = temp_result_layer.getFeatures()
         
-        # Iterate and copy features
-        for current, feature in enumerate(features):
-            if feedback.isCanceled():
-                break
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
-            feedback.setProgress(int(current * total))
+        for feature in features_main:
+            sink_main.addFeature(feature, QgsFeatureSink.FastInsert)
 
-        output_layer = QgsProcessingUtils.mapLayerFromString(dest_id, context)
-        assert output_layer is not None
+        output_layer_main = QgsProcessingUtils.mapLayerFromString(dest_id_main, context)
+        self._post_process_layer(parameters, context, feedback, output_layer_main)
 
-        # 6. Post-process: style and order the new layer
-        self._post_process_layer(parameters, context, feedback, output_layer)
+        # 6. Handle the SECONDARY Output (Shadows on Lower Buildings)
+        dest_id_filtered = None
+        if filtered_layer_id is not None:
+            filtered_temp_layer = context.getMapLayer(filtered_layer_id)
+            
+            # Prepare the filtered output sink
+            (sink_filtered, dest_id_filtered) = self.parameterAsSink(parameters, self.HEIGHT_DIFFERENCE_OUTPUT,
+                    context, filtered_temp_layer.fields(), filtered_temp_layer.wkbType(), filtered_temp_layer.sourceCrs())
+            
+            # Copy features from the filtered layer to the secondary sink
+            feedback.pushInfo("Copying features to the Filtered Output layer (Shadows on Lower Buildings)...")
+            features_filtered = filtered_temp_layer.getFeatures()
+            
+            for feature in features_filtered:
+                sink_filtered.addFeature(feature, QgsFeatureSink.FastInsert)
+            
+            # Optional: Apply different styling to the filtered layer
+            output_layer_filtered = QgsProcessingUtils.mapLayerFromString(dest_id_filtered, context)
+            if output_layer_filtered:
+                symbol = output_layer_filtered.renderer().symbol()
+                red_color = QtGui.QColor.fromRgb(255, 0, 0, 100) # Semi-transparent red
+                symbol.setColor(red_color)
+                symbol.symbolLayer(0).setStrokeColor(red_color)
+                output_layer_filtered.triggerRepaint()
 
-        # 7. Return the final sink ID
+
+        # 7. Return the final sink IDs
         return {
-            self.OUTPUT: dest_id 
+            self.OUTPUT: dest_id_main,
+            self.HEIGHT_DIFFERENCE_OUTPUT: dest_id_filtered
         }
-
 # ----------------------------------------------------------------------
 ## Metadata Methods
 # ----------------------------------------------------------------------
