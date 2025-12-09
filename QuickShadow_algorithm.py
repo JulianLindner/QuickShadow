@@ -110,7 +110,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT,
-                self.tr('Output layer')
+                self.tr('Ground Shadows')
             )
         )
 
@@ -126,7 +126,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.HEIGHT_DIFFERENCE_OUTPUT,
-                self.tr('Shadows on Lower Buildings (Optional Output)'),
+                self.tr('Shadows on Lower Buildings'),
                 optional=True
             )
         )
@@ -229,13 +229,12 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             return shadow_layer_id, None # Return main ID and None for the secondary output
         
         # --- A. Spatial Join (Join Attributes by Location) ---
-        # ... (same as before) ...
         feedback.pushInfo("Step A: Running Spatial Join using INPUT layer as comparison...")
 
         join_params = {
             'INPUT': shadow_layer_id,
             'JOIN': parameters[self.INPUT],
-            'PREDICATE': [0],
+            'PREDICATE': [0], # Intersects
             'JOIN_FIELDS': [height_field_name],
             'METHOD': 0,
             'DISCARD_NON_MATCHING': True,
@@ -255,16 +254,18 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         
         # --- B. Field Calculator ---
         # Calculate the difference: Caster_Height - Receiver_Height
-        # ... (same as before) ...
         feedback.pushInfo("Step B: Calculating Height Difference (HEIGHT_DIFF)...")
         
         joined_field_name = f'comp_{height_field_name}'
+        # NOTE: The attribute fields from the Input layer (the receiver) are preserved
+        #       on the feature that is the shadow (the caster).
+        #       The *joined* field (comp_*) is the attribute of the *receiver* building.
         difference_expression = f"\"{height_field_name}\" - \"{joined_field_name}\""
         
         calc_params = {
             'INPUT': joined_layer_id,
             'FIELD_NAME': self.HEIGHT_DIFFERENCE_FIELD,
-            'FIELD_TYPE': 0, 
+            'FIELD_TYPE': 0, # Float
             'FIELD_LENGTH': 10,
             'FIELD_PRECISION': 2,
             'FORMULA': difference_expression,
@@ -279,18 +280,20 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             feedback.reportError("Failed to execute Field Calculator.", True)
             return shadow_layer_id, None
 
-        final_layer_id = calc_result[0]['OUTPUT']
+        calculated_layer_id = calc_result[0]['OUTPUT']
         
-        # --- C. Select and Filter Features (Optional Output) ---
+        # --- C. Recalculate Shadow Geometry and Intersect (The new logic) ---
         filtered_layer_id = None
         
         # Check if the user defined an optional output sink for filtered results
-        if self.parameterAsOutputLayer(parameters, self.HEIGHT_DIFFERENCE_OUTPUT) is not None:
-            feedback.pushInfo("Step C: Filtering features where Caster > Receiver (HEIGHT_DIFF > 0)...")
+        if self.parameterAsOutputLayer(parameters, self.HEIGHT_DIFFERENCE_OUTPUT, context) is not None:
             
-            # Select features where HEIGHT_DIFF is greater than 0
+            feedback.pushInfo("Step C1: Isolating features with a positive Height Difference...")
+            
+            # C1. Select features where HEIGHT_DIFF is greater than 0
+            # This extracts the features where the caster is higher than the receiver.
             filter_params = {
-                'INPUT': final_layer_id,
+                'INPUT': calculated_layer_id,
                 'EXPRESSION': f"\"{self.HEIGHT_DIFFERENCE_FIELD}\" > 0",
                 'METHOD': 0, # Create subset
                 'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -301,14 +304,97 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             )
             
             if filter_result is None or 'OUTPUT' not in filter_result[0]:
-                feedback.reportError("Failed to execute Select by Expression.", True)
+                feedback.reportError("Failed to execute Select by Expression (Filtering Caster > Receiver).", True)
                 return shadow_layer_id, None
             
-            filtered_layer_id = filter_result[0]['OUTPUT']
+            filtered_features_layer_id = filter_result[0]['OUTPUT']
+            
+            # ------------------------------------------------------------------
+            # C2. Recalculate Shadow Geometry based on HEIGHT_DIFF
+            # This is a modified version of the _run_geometry_by_expression logic.
+            # We use the *original* feature geometry (the receiver building) and the
+            # HEIGHT_DIFF field to calculate the shadow falling on it.
+            # ------------------------------------------------------------------
+            shadow_angle = self.parameterAsDouble(parameters, self.SHADOW_ANGLE, context)
+            shadow_factor = self.parameterAsDouble(parameters, self.SHADOW_LENGTH_FACTOR, context)
 
-        # Returns the ID of the layer containing ALL joined/calculated features (for the main output)
-        # and the ID of the layer containing only the filtered features (for the secondary output).
-        return final_layer_id, filtered_layer_id
+            # Calculate x and y offset using the new HEIGHT_DIFFERENCE_FIELD
+            # Logic: offset = - (height_diff * factor) * trigonometric_function(angle)
+            dx = f"-( \"{self.HEIGHT_DIFFERENCE_FIELD}\" * {shadow_factor}) * sin(radians({shadow_angle}))"
+            dy = f"-( \"{self.HEIGHT_DIFFERENCE_FIELD}\" * {shadow_factor}) * cos(radians({shadow_angle}))"
+
+            # Define the expression: extrude the shadow-receiving buildings
+            # The geometry @geometry here refers to the geometry of the features in filtered_features_layer_id,
+            # which are the original *shadow* geometries, but they carry the *receiver's* attributes
+            # and crucially, their original *geometry* is still the full shadow polygon. 
+            # 
+            # To fix this, we need to extract the *original* building geometry from the INPUT layer.
+            # This is complex in a single processing chain. A simpler approach is to use the original
+            # INPUT layer features that were involved in the overlap/join, and only select
+            # those that now have a HEIGHT_DIFF > 0.
+            
+            # --- Alternative C2/C3: Intersect the Original Buildings with the Filtered Shadows ---
+            # Instead of recalculating, we can use the 'Select by Expression' layer from C1, 
+            # which represents the *full* shadow from a higher building, but only for the cases
+            # where it overlaps a lower building (and only keeps the *overlap* geometry). 
+            # The original logic of the geometry by expression is based on the *caster* geometry.
+            
+            feedback.pushInfo("Step C2: Intersecting original receiving buildings with filtered shadows...")
+            
+            # We must use the original building geometry (the receiver) and clip the full shadow (caster)
+            # The simplest path to achieve the final visual goal is **not** to recalculate the shadow, 
+            # but to intersect the full shadow with the receiver building's area,
+            # *after* filtering for the height difference.
+            
+            # First, extract the original building geometry that had an overlap and a positive HEIGHT_DIFF.
+            # This requires joining attributes from the calculated layer *back* to the original buildings.
+            # Since that's complicated, we will stick to the INTERSECTION idea, but only for the filtered list.
+            
+            # --- C3: Final Intersection (Clipping) ---
+            # We want to clip the *full* shadow with the *receiver* building's area. 
+            # The receiver building's geometry is *not* easily available here. 
+            # Let's use the 'Intersection' algorithm with the result of C1 (filtered shadow) and the original INPUT layer.
+            
+            if self.parameterAsOutputLayer(parameters, self.HEIGHT_DIFFERENCE_OUTPUT, context) is not None:
+            
+                # ... (C1: Select by Expression executes successfully, resulting in filtered_features_layer_id) ...
+                
+                feedback.pushInfo("Step C3: Running Intersection (Clipping Shadow to Building Top)...")
+
+            # --- fix 1: convert FILTERED layer properly ---
+            filtered_layer = QgsProcessingUtils.mapLayerFromString(filtered_features_layer_id, context)
+            if filtered_layer is None:
+                filtered_layer = QgsVectorLayer(filtered_features_layer_id, "filtered", "ogr")
+
+            # --- fix 2: get INPUT layer *as URI* ---
+            input_layer_id = parameters[self.INPUT]
+            input_layer = context.getMapLayer(input_layer_id)
+            if input_layer is None:
+                feedback.reportError("Input layer could not be resolved for intersection.")
+                return shadow_layer_id, None
+
+            input_uri = input_layer.source()
+
+            intersection_params = {
+                'INPUT': filtered_layer,
+                'OVERLAY': input_uri,
+                'INPUT_FIELDS': [self.HEIGHT_DIFFERENCE_FIELD],
+                'OVERLAY_FIELDS': [],
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+            }
+
+            intersection_result = QgsApplication.processingRegistry().algorithmById(
+                'qgis:intersection').run(intersection_params, context, feedback)
+
+            if intersection_result is None or 'OUTPUT' not in intersection_result[0]:
+                feedback.reportError("Failed to execute Intersection (Clipping Shadow to Building Top).", True)
+                return shadow_layer_id, None
+
+            filtered_layer_id = intersection_result[0]['OUTPUT']
+
+            
+            # final_layer_id is calculated_layer_id
+            return calculated_layer_id, filtered_layer_id
 
 # ----------------------------------------------------------------------
 ## Main Processing Method
