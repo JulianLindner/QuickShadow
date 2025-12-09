@@ -3,12 +3,12 @@
 # This file should be included when you package your plugin.# Mandatory items:
 
 [general]
-name=Shadow Generator
+name=QuickShadow
 qgisMinimumVersion=3.0
 description=This plugin creates shadows from Polygons
 version=0.1
 author=Julian Lindner
-email=shadow@julianlindner.de
+email=QuickShadow@julianlindner.de
 
 about=Will do later
 
