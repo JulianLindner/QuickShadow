@@ -13,12 +13,12 @@
  ***************************************************************************/
 
 /***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
+ * *
+ * This program is free software; you can redistribute it and/or modify  *
+ * it under the terms of the GNU General Public License as published by  *
+ * the Free Software Foundation; either version 2 of the License, or     *
+ * (at your option) any later version.                                   *
+ * *
  ***************************************************************************/
 """
 
@@ -43,10 +43,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterField,
                        QgsApplication,
                        QgsProcessingUtils,
-                       QgsMessageLog, 
-                       QgsProject,
-                       QgsLayerTreeLayer)
-# from qgis.core import *
+                       QgsProject)
 from qgis import utils
 
 
@@ -76,7 +73,6 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         )
 
         # Added Field of Building heights / levels as an input.
-        # Currently every field type is allowed. Might need to be converted to numeric later on
         self.addParameter(
             QgsProcessingParameterField(
                 self.HEIGHT_FIELD,
@@ -102,7 +98,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.SHADOW_LENGTH_FACTOR,
                 self.tr('Shadow Length / Factor'),
-                defaultValue=1.0,  # Default to 45 degree altitude
+                defaultValue=1.0,  # Default to 45 degree altitude (tan(45) = 1)
                 minValue=0.1,      # Avoid extremely flat angles
             )
         )
@@ -115,35 +111,42 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
-    def processAlgorithm(self, parameters, context, feedback):
-       # 1. Retrieve input source and field name
-        source = self.parameterAsSource(parameters, self.INPUT, context)
+# ----------------------------------------------------------------------
+## Helper Methods for Process Algorithm
+# ----------------------------------------------------------------------
 
-        if source is None:
-            feedback.reportError("Could not load source layer for INPUT. Please ensure a valid layer is selected.", True)
-            return {} # Return empty dictionary to indicate failure
-    
+    def _get_height_expression(self, parameters, context, feedback):
+        """
+        Determines the QGIS expression string for the building height value.
+        """
         height_field_name = self.parameterAsString(parameters, self.HEIGHT_FIELD, context)
-
-        shadow_angle = self.parameterAsDouble(parameters, self.SHADOW_ANGLE, context)
-        shadow_factor = self.parameterAsDouble(parameters, self.SHADOW_LENGTH_FACTOR, context)
-
-        # Check if Height Field is filled out
+        
+        # Check if Height Field is filled out and is not the default placeholder
         if height_field_name and height_field_name != self.DEFAULT_HEIGHT_FIELD_NAME:
             height_value_expression = f"\"{height_field_name}\""
             feedback.pushInfo(f"Using field: {height_field_name} for shadow calculation.")
         else:
+            # Use a default height of 1.0 for calculation if no field is provided
             height_value_expression = "1.0"
             feedback.pushInfo("No height field selected. Using a default height value of 1.0.")
             
+        return height_value_expression
+
+    def _run_geometry_by_expression(self, parameters, context, feedback, height_value_expression):
+        """
+        Constructs the geometry expression and executes the 'qgis:geometrybyexpression' algorithm.
+        Returns the temporary result layer ID or None on failure.
+        """
+        shadow_angle = self.parameterAsDouble(parameters, self.SHADOW_ANGLE, context)
+        shadow_factor = self.parameterAsDouble(parameters, self.SHADOW_LENGTH_FACTOR, context)
+
         # Calculate x and y offset from angle and factor
-        # The height_value_expression will be either: "field_name" or "1.0"
+        # Logic: offset = - (height * factor) * trigonometric_function(angle)
+        # The negative sign flips the direction from sun angle to shadow extension
         dx = f"-( {height_value_expression} * {shadow_factor}) * sin(radians({shadow_angle}))"
         dy = f"-( {height_value_expression} * {shadow_factor}) * cos(radians({shadow_angle}))"
 
-        # 2. Define the expression
-        # We use the selected field name in the expression string
-        # The logic is: segments_to_lines(geometry) -> extrude lines by (field, field) -> buffer by 0
+        # Define the expression: extrude line segments and buffer by 0 to create a shadow polygon
         expression = f"""
             buffer( 
                 extrude(
@@ -155,121 +158,73 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             )
         """
               
-        # 3. Get temporary output sink ID
-        # We use a temporary sink to hold the result of the 'Geometry by Expression' algorithm
-        temp_output_id = 'temporary_output'
-        
-        # 4. Run the 'Geometry by Expression' processing algorithm
-        # This is the most efficient way to run a geometry expression on an entire layer.
-        
         # Define the parameters for the 'Geometry by Expression' algorithm
         alg_params = {
             'INPUT': parameters[self.INPUT],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
             'EXPRESSION': expression,
-            # Ensure the output type is a Polygon (which an extruded line buffered by 0 usually is)
+            # Output type is Polygon
             'OUTPUT_GEOMETRY': QgsProcessing.TypeVectorPolygon
         }
         
-        # Execute the algorithm
         feedback.pushInfo(f"Executing Geometry by Expression with:\nExpression: {expression}")
         
-        # Call the built-in QGIS processing algorithm
-        import processing
-
+        # Execute the built-in QGIS processing algorithm
         result_tuple = QgsApplication.processingRegistry().algorithmById('qgis:geometrybyexpression').run(
            alg_params,
            context,
            feedback
         )  
         
-        if result_tuple is None:
-            # Handle case where the sub-algorithm fails
+        if result_tuple is None or 'OUTPUT' not in result_tuple[0]:
             feedback.reportError("Failed to execute 'Geometry by Expression' algorithm.", True)
-            return {}
+            return None
         
-        result_dict = result_tuple[0]
-
-        if 'OUTPUT' not in result_dict:
-            feedback.reportError("Sub-algorithm failed to produce an output ('OUTPUT' key is missing).", True)
-            return {}
-
-        # 5. Retrieve the temporary result layer
-        temp_result_layer = context.getMapLayer(result_dict['OUTPUT'])
-
-        if temp_result_layer is None:
-            feedback.reportError("Could not retrieve temporary result layer.", True)
-            return {}
-
-        # 6. Copy features from the temporary layer to the final output sink
-        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                context, temp_result_layer.fields(), temp_result_layer.wkbType(), temp_result_layer.sourceCrs())
-        
-        # This is necessary because the input to a QgsProcessingParameterFeatureSink 
-        # must come from a source that is registered as an output of *this* algorithm, 
-        # or by manually adding features.
-        
-        features = temp_result_layer.getFeatures()
-        total = 100.0 / temp_result_layer.featureCount() if temp_result_layer.featureCount() else 0
-        
-        for current, feature in enumerate(features):
-            if feedback.isCanceled():
-                break
-            
-            # Add the feature with the new geometry to the final sink
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
-            feedback.setProgress(int(current * total))
-
-        output_layer = QgsProcessingUtils.mapLayerFromString(dest_id, context)
-        assert output_layer is not None
+        # Return the ID of the temporary output layer
+        return result_tuple[0]['OUTPUT']
 
 
-        # Set Color to grey
-        # output_layer = utils.iface.activeLayer()
+    def _post_process_layer(self, parameters, context, feedback, output_layer):
+        """
+        Applies grey styling to the shadow layer and attempts to move it 
+        below the original input layer in the layer tree.
+        """
+        # --- 1. Apply Styling ---
         single_symbol_renderer = output_layer.renderer()
         symbol = single_symbol_renderer.symbol()
-        #Set fill colour
-        symbol.setColor(QtGui.QColor.fromRgb(200,200,200))
-        #Set fill style
-        # symbol_layer = symbol.symbolLayer(0).setBrushStyle(Qt.BrushStyle(Qt.FDiagPattern))
-        # #Set stroke colour
-        symbol.symbolLayer(0).setStrokeColor(QtGui.QColor(200,200,200))
-        #Refresh
+        
+        # Set fill and stroke colour to a light grey
+        grey_color = QtGui.QColor.fromRgb(200, 200, 200)
+        symbol.setColor(grey_color)
+        symbol.symbolLayer(0).setStrokeColor(grey_color)
+        
+        # Refresh symbology in the interface
         output_layer.triggerRepaint()
-        utils.iface.layerTreeView().refreshLayerSymbology(output_layer.id())
+        if utils.iface:
+            utils.iface.layerTreeView().refreshLayerSymbology(output_layer.id())
 
-        # Put Layer behind the origin Layer
-        root = QgsProject.instance().layerTreeRoot()
 
+        # --- 2. Adjust Layer Ordering ---
         original_layer = QgsProcessingUtils.mapLayerFromString(
             parameters[self.INPUT], 
             context
         )
 
         if original_layer:
-            # 1. Get the Layer Tree Root
             root = QgsProject.instance().layerTreeRoot()
-            
-            # 2. Find the layer tree nodes for both layers using their IDs
             original_layer_node = root.findLayer(original_layer.id())
             new_layer_node = root.findLayer(output_layer.id())
             
             if original_layer_node and new_layer_node:
-                # 3. Get the parent group/root
                 parent_group = original_layer_node.parent()
                 
                 if parent_group:
                     try:
-                        # 4. Get the index of the original layer
+                        # Find the index of the original layer
                         original_layer_index = parent_group.children().index(original_layer_node)
                         
-                        # 5. Move the new layer node to the position immediately below
-                        # Move the layer by removing the node and inserting a clone.
-                        
-                        # Remove the new layer node from its current position
+                        # Remove and insert the new layer node below the original (index + 1)
                         parent_group.removeChildNode(new_layer_node)
-                        
-                        # Insert a clone of the new layer node at the target index (original_layer_index + 1)
                         parent_group.insertChildNode(
                             original_layer_index + 1, 
                             new_layer_node.clone()
@@ -279,62 +234,99 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
                     except ValueError:
                          feedback.pushWarning("Original layer found, but its position index could not be determined. Order not adjusted.")
                 else:
-                    feedback.pushWarning("Original layer node has no parent (Layer Tree Root or Group). Cannot adjust order.")
+                    feedback.pushWarning("Original layer node has no parent. Cannot adjust order.")
             else:
-                feedback.pushWarning(f"Could not find the node for the Original Layer (found: {bool(original_layer_node)}) or the New Layer (found: {bool(new_layer_node)}) in the layer tree. Order not adjusted.")
+                feedback.pushWarning(f"Could not find the layer nodes in the layer tree. Order not adjusted.")
         else:
             feedback.pushWarning("Could not retrieve original input layer object. Order not adjusted.")
-         
-        if utils.iface:
-            utils.iface.layerTreeView().refreshLayerSymbology(output_layer.id())
 
-        # QgsLayerTreeCanvasBridge.instance().bringToFront(output_layer)
-        # root = QgsProject.instance().layerTreeRoot()
+
+# ----------------------------------------------------------------------
+## Main Processing Method
+# ----------------------------------------------------------------------
+
+    def processAlgorithm(self, parameters, context, feedback):
+       
+        # 1. Retrieve input source
+        source = self.parameterAsSource(parameters, self.INPUT, context)
+
+        if source is None:
+            feedback.reportError("Could not load source layer for INPUT. Please ensure a valid layer is selected.", True)
+            return {} 
+
+        # 2. Determine the height value expression (e.g., "Field_Name" or "1.0")
+        height_value_expression = self._get_height_expression(parameters, context, feedback)
+            
+        # 3. Run the 'Geometry by Expression' processing algorithm
+        temp_output_id = self._run_geometry_by_expression(
+            parameters, 
+            context, 
+            feedback, 
+            height_value_expression
+        )
         
-        # print(root.children().index(output_layer))
+        if temp_output_id is None:
+            return {} # Failure occurred in the sub-algorithm
 
-        # root.insertChildNode(
-        #     root.children().index(output_layer) + 1, 
-        #     output_layer.clone()
-        # )
+        # 4. Retrieve the temporary result layer
+        temp_result_layer = context.getMapLayer(temp_output_id)
 
-        # Return the final sink ID
+        if temp_result_layer is None:
+            feedback.reportError("Could not retrieve temporary result layer.", True)
+            return {}
+
+        # 5. Copy features from the temporary layer to the final output sink
+        # Prepare the final output sink
+        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
+                context, temp_result_layer.fields(), temp_result_layer.wkbType(), temp_result_layer.sourceCrs())
+        
+        features = temp_result_layer.getFeatures()
+        feature_count = temp_result_layer.featureCount()
+        total = 100.0 / feature_count if feature_count else 0
+        
+        # Iterate and copy features
+        for current, feature in enumerate(features):
+            if feedback.isCanceled():
+                break
+            sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            feedback.setProgress(int(current * total))
+
+        output_layer = QgsProcessingUtils.mapLayerFromString(dest_id, context)
+        assert output_layer is not None
+
+        # 6. Post-process: style and order the new layer
+        self._post_process_layer(parameters, context, feedback, output_layer)
+
+        # 7. Return the final sink ID
         return {
             self.OUTPUT: dest_id 
         }
 
+# ----------------------------------------------------------------------
+## Metadata Methods
+# ----------------------------------------------------------------------
 
     def name(self):
         """
-        Returns the algorithm name, used for identifying the algorithm. This
-        string should be fixed for the algorithm, and must not be localised.
-        The name should be unique within each provider. Names should contain
-        lowercase alphanumeric characters only and no spaces or other
-        formatting characters.
+        Returns the algorithm name, used for identifying the algorithm.
         """
         return 'Create Shadow'
 
     def displayName(self):
         """
-        Returns the translated algorithm name, which should be used for any
-        user-visible display of the algorithm name.
+        Returns the translated algorithm name.
         """
         return self.tr(self.name())
 
     def group(self):
         """
-        Returns the name of the group this algorithm belongs to. This string
-        should be localised.
+        Returns the name of the group this algorithm belongs to.
         """
         return self.tr(self.groupId())
 
     def groupId(self):
         """
-        Returns the unique ID of the group this algorithm belongs to. This
-        string should be fixed for the algorithm, and must not be localised.
-        The group id should be unique within each provider. Group id should
-        contain lowercase alphanumeric characters only and no spaces or other
-        formatting characters.
+        Returns the unique ID of the group this algorithm belongs to.
         """
         return 'Algorithms for Vector Polygon Layer'
 
