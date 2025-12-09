@@ -55,6 +55,7 @@ class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
     # Constants
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
+    DEFAULT_HEIGHT_FIELD_NAME = 'default_height_value'
     HEIGHT_FIELD = 'HEIGHT_FIELD'
     SHADOW_ANGLE = 'SHADOW_ANGLE' 
     SHADOW_LENGTH_FACTOR = 'SHADOW_LENGTH_FACTOR'
@@ -79,17 +80,18 @@ class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterField(
                 self.HEIGHT_FIELD,
-                self.tr('Building Levels/Height Field'),
+                self.tr('Height Field'),
                 parentLayerParameterName=self.INPUT,
-                type=QgsProcessingParameterField.Any,
-                optional=False
+                optional=True, 
+                defaultValue=self.DEFAULT_HEIGHT_FIELD_NAME, 
+                type=QgsProcessingParameterField.Any
             )
         )
 
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.SHADOW_ANGLE,
-                self.tr('Shadow Angle (Azimuth in Degrees)'),
+                self.tr('Shadow Angle'),
                 defaultValue=225.0,  # Default to Northwest
                 minValue=0.0,
                 maxValue=360.0
@@ -99,7 +101,7 @@ class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.SHADOW_LENGTH_FACTOR,
-                self.tr('Shadow Length Factor (cot(Sun Altitude))'),
+                self.tr('Shadow Length / Factor'),
                 defaultValue=1.0,  # Default to 45 degree altitude
                 minValue=0.1,      # Avoid extremely flat angles
             )
@@ -126,9 +128,18 @@ class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
         shadow_angle = self.parameterAsDouble(parameters, self.SHADOW_ANGLE, context)
         shadow_factor = self.parameterAsDouble(parameters, self.SHADOW_LENGTH_FACTOR, context)
 
+        # Check if Height Field is filled out
+        if height_field_name and height_field_name != self.DEFAULT_HEIGHT_FIELD_NAME:
+            height_value_expression = f"\"{height_field_name}\""
+            feedback.pushInfo(f"Using field: {height_field_name} for shadow calculation.")
+        else:
+            height_value_expression = "1.0"
+            feedback.pushInfo("No height field selected. Using a default height value of 1.0.")
+            
         # Calculate x and y offset from angle and factor
-        dx = f"-( \"{height_field_name}\" * {shadow_factor}) * sin(radians({shadow_angle}))"
-        dy = f"-( \"{height_field_name}\" * {shadow_factor}) * cos(radians({shadow_angle}))"
+        # The height_value_expression will be either: "field_name" or "1.0"
+        dx = f"-( {height_value_expression} * {shadow_factor}) * sin(radians({shadow_angle}))"
+        dy = f"-( {height_value_expression} * {shadow_factor}) * cos(radians({shadow_angle}))"
 
         # 2. Define the expression
         # We use the selected field name in the expression string
