@@ -9,7 +9,7 @@ QuickShadow
                               -------------------
         begin                : 2025-12-05
         copyright            : (C) 2025 by Julian Lindner
-        email                : shadow@julianlindner.de
+        email                : QuickShadow@julianlindner.de
  ***************************************************************************/
 
 /***************************************************************************
@@ -35,7 +35,7 @@ import sys
 import inspect
 
 from qgis.core import QgsProcessingAlgorithm, QgsApplication
-from .shadow_generator_provider import ShadowGeneratorProvider
+from .QuickShadow_provider import QuickShadowProvider
 
 cmd_folder = os.path.split(inspect.getfile(inspect.currentframe()))[0]
 
@@ -43,14 +43,14 @@ if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
 
-class ShadowGeneratorPlugin(object):
+class QuickShadowPlugin(object):
 
     def __init__(self):
         self.provider = None
 
     def initProcessing(self):
         """Init Processing provider for QGIS >= 3.8."""
-        self.provider = ShadowGeneratorProvider()
+        self.provider = QuickShadowProvider()
         QgsApplication.processingRegistry().addProvider(self.provider)
 
     def initGui(self):

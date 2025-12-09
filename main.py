@@ -1,5 +1,5 @@
 def main():
-    print("Hello from shadow-generator!")
+    print("Hello from QuickShadow!")
 
 
 if __name__ == "__main__":

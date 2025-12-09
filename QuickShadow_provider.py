@@ -9,7 +9,7 @@
                               -------------------
         begin                : 2025-12-05
         copyright            : (C) 2025 by Julian Lindner
-        email                : shadow@julianlindner.de
+        email                : QuickShadow@julianlindner.de
  ***************************************************************************/
 
 /***************************************************************************
@@ -31,10 +31,10 @@ __copyright__ = '(C) 2025 by Julian Lindner'
 __revision__ = '$Format:%H$'
 
 from qgis.core import QgsProcessingProvider
-from .shadow_generator_algorithm import ShadowGeneratorAlgorithm
+from .QuickShadow_algorithm import QuickShadowAlgorithm
 
 
-class ShadowGeneratorProvider(QgsProcessingProvider):
+class QuickShadowProvider(QgsProcessingProvider):
 
     def __init__(self):
         """
@@ -53,7 +53,7 @@ class ShadowGeneratorProvider(QgsProcessingProvider):
         """
         Loads all algorithms belonging to this provider.
         """
-        self.addAlgorithm(ShadowGeneratorAlgorithm())
+        self.addAlgorithm(QuickShadowAlgorithm())
         # add additional algorithms here
         # self.addAlgorithm(MyOtherAlgorithm())
 

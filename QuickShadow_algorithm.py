@@ -50,7 +50,7 @@ from qgis.core import (QgsProcessing,
 from qgis import utils
 
 
-class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
+class QuickShadowAlgorithm(QgsProcessingAlgorithm):
 
     # Constants
     INPUT = 'INPUT'
@@ -342,4 +342,4 @@ class ShadowGeneratorAlgorithm(QgsProcessingAlgorithm):
         return QCoreApplication.translate('Processing', string)
 
     def createInstance(self):
-        return ShadowGeneratorAlgorithm()
+        return QuickShadowAlgorithm()
