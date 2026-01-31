@@ -30,11 +30,8 @@ __copyright__ = '(C) 2025 by Julian Lindner'
 
 __revision__ = '$Format:%H$'
 
-import os
-import sys
-import inspect
-
-from qgis.core import QgsProcessingAlgorithm, QgsApplication
+import os, sys, inspect
+from qgis.core import QgsApplication
 from .QuickShadow_provider import QuickShadowProvider
 
 cmd_folder = os.path.split(inspect.getfile(inspect.currentframe()))[0]
