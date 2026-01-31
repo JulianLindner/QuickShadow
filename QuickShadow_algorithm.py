@@ -10,8 +10,8 @@
 """
 
 __author__ = 'Julian Lindner'
-__date__ = '2025-12-05'
-__copyright__ = '(C) 2025 by Julian Lindner'
+__date__ = '2026-01-26'
+__copyright__ = '(C) 2026 by Julian Lindner'
 
 import processing
 
@@ -247,6 +247,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         return {
             self.OUTPUT: dest_id_main,
         }
+    
 # ----------------------------------------------------------------------
 ## Metadata Methods
 # ----------------------------------------------------------------------
