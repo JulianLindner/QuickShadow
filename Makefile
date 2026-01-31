@@ -38,13 +38,17 @@ LOCALES = en
 # translation
 SOURCES = \
 	__init__.py \
-	QuickShadow.py 
+	QuickShadow.py \
+	QuickShadow_provider.py \
+	QuickShadow_algorithm.py
 
 PLUGINNAME = QuickShadow
 
 PY_FILES = \
 	__init__.py \
-	QuickShadow.py 
+	QuickShadow.py \
+	QuickShadow_provider.py \
+	QuickShadow_algorithm.py	
 
 UI_FILES = 
 

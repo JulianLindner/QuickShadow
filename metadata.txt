@@ -5,12 +5,12 @@
 [general]
 name=QuickShadow
 qgisMinimumVersion=3.0
-description=This plugin creates shadows from Polygons
-version=0.1
+description=This plugin creates cast shadows from Polygons
+version=1
 author=Julian Lindner
 email=QuickShadow@julianlindner.de
 
-about=Will do later
+about= This Plugin adds a processing function to create cast shadows from polygons, such as buildings.
 
 tracker=http://bugs
 repository=http://repo
@@ -23,10 +23,10 @@ hasProcessingProvider=yes
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python
+tags=shadows, polygons, 
 
 homepage=http://homepage
-category=Analysis
+category=Vector
 icon=icon.png
 # experimental flag
 experimental=False

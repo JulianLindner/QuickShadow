@@ -253,7 +253,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
 # ----------------------------------------------------------------------
 
     def name(self):
-        return 'Create Simple Ground Shadow'
+        return 'Create cast shadow'
 
     def displayName(self):
         return self.tr(self.name())
