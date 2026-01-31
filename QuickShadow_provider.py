@@ -9,7 +9,7 @@ class QuickShadowProvider(QgsProcessingProvider):
         self.addAlgorithm(QuickShadowAlgorithm())
 
     def id(self):
-        return 'quickshadow'  # No spaces, lowercase
+        return 'quickshadow'
 
     def name(self):
         return 'QuickShadow'
