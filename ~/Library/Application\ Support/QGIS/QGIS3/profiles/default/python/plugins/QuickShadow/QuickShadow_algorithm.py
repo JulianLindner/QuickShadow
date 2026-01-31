@@ -199,68 +199,54 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         """
-        Main execution method for the QuickShadow algorithm.
-        Calculates shadows and subtracts the original building footprints.
+        Main execution method for the QuickShadow algorithm (Ground Shadow Only).
         """
        
         # 1. Retrieve and validate input source layer
         source = self.parameterAsSource(parameters, self.INPUT, context)
+
         if source is None:
             feedback.reportError("Could not load source layer for INPUT.", True)
             return {} 
 
-        # 2. Determine the height value expression
+        # 2. Determine the height value expression (e.g., "Field_Name" or "1.0")
         height_value_expression = self._get_height_expression(parameters, context, feedback)
             
-        # 3. Run the 'Geometry by Expression' to get the "full" shadow shapes
-        temp_shadow_id = self._run_geometry_by_expression(
+        # 3. Run the 'Geometry by Expression' processing algorithm to get raw shadows
+        temp_output_id = self._run_geometry_by_expression(
             parameters, 
             context, 
             feedback, 
             height_value_expression
         )
         
-        if temp_shadow_id is None:
-            return {}
+        if temp_output_id is None:
+            return {} # Failure occurred in the sub-algorithm
 
-        # 4. SUBTRACT Building Area: Run 'native:difference'
-        feedback.pushInfo("Subtracting building footprints from shadows...")
-        diff_params = {
-            'INPUT': temp_shadow_id,
-            'OVERLAY': parameters[self.INPUT],
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
-        
-        diff_result = processing.run(
-            'native:difference',
-            diff_params,
-            context=context,
-            feedback=feedback,
-            is_child_algorithm=True
-        )
-        
-        final_temp_layer = context.getMapLayer(diff_result['OUTPUT'])
+        # 4. Handle the MAIN Output (Ground Shadows)
+        temp_result_layer = context.getMapLayer(temp_output_id)
 
-        # 5. Handle the Final Output Sink
+        # Prepare the final output sink
         (sink_main, dest_id_main) = self.parameterAsSink(
             parameters, self.OUTPUT,
-            context, final_temp_layer.fields(), final_temp_layer.wkbType(), final_temp_layer.sourceCrs()
+            context, temp_result_layer.fields(), temp_result_layer.wkbType(), temp_result_layer.sourceCrs()
         )
         
-        if sink_main is None:
-            return {}
-
-        # Copy features from the difference result to the main output sink
-        features_main = final_temp_layer.getFeatures()
+        # Copy features from the temporary layer to the main output sink
+        feedback.pushInfo("Copying features to the Main Output layer...")
+        features_main = temp_result_layer.getFeatures()
+        
         for feature in features_main:
             sink_main.addFeature(feature, QgsFeatureSink.FastInsert)
 
-        # Apply basic styling
+        # Apply basic styling to the final main layer
         output_layer_main = QgsProcessingUtils.mapLayerFromString(dest_id_main, context)
-        if output_layer_main:
-            self._post_process_layer(output_layer_main)
+        self._post_process_layer(output_layer_main)
 
-        return {self.OUTPUT: dest_id_main}
+        # 5. Return the final sink ID
+        return {
+            self.OUTPUT: dest_id_main,
+        }
     
 # ----------------------------------------------------------------------
 ## Metadata Methods
