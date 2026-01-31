@@ -22,7 +22,7 @@ hasProcessingProvider=yes
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=shadows, polygons, buildings,
+tags=shadows, polygons, buildings, processing
 
 homepage=http://homepage
 category=Vector
