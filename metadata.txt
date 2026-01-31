@@ -24,7 +24,7 @@ hasProcessingProvider=yes
 # Tags are comma separated with spaces allowed
 tags=shadows, polygons, buildings, processing
 
-homepage=http://homepage
+#homepage=http://homepage
 category=Vector
 icon=icon.png
 # experimental flag
