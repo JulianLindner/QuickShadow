@@ -17,16 +17,16 @@ repository=https://github.com/JulianLindner/QuickShadow
 
 # Recommended items:
 
-hasProcessingProvider=yes
+# hasProcessingProvider=yes
 # Uncomment the following line and add your changelog:
 # changelog=
 
 # Tags are comma separated with spaces allowed
 tags=shadows, polygons, buildings, processing
 
-#homepage=http://homepage
+homepage=http://homepage
 category=Vector
-icon=icon.png
+icon=icon.svg
 # experimental flag
 experimental=False
 

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Ebene_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 283.5 283.5">
+  <!-- Generator: Adobe Illustrator 30.1.0, SVG Export Plug-In . SVG Version: 2.1.1 Build 136)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #fff;
+        stroke: #1d1d1b;
+        stroke-miterlimit: 10;
+      }
+
+      .st0, .st1 {
+        stroke-width: 3px;
+      }
+
+      .st1 {
+        fill: #1d1d1b;
+        opacity: .5;
+        stroke: #000;
+        stroke-linejoin: round;
+      }
+    </style>
+  </defs>
+  <polygon class="st1" points="248 39.4 248 206.5 202.4 244.1 35.3 77 90.9 39.4 248 39.4"/>
+  <rect class="st0" x="35.3" y="77" width="167.1" height="167.1" transform="translate(-41.7 279.4) rotate(-90)"/>
+</svg>

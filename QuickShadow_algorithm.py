@@ -1,18 +1,3 @@
-# -*- coding: utf-8 -*-
-
-"""
-/***************************************************************************
- QuickShadow (Simplified)
-                                 A QGIS plugin
- This plugin creates simple ground shadows from Polygons, simulating cast shadows
- based on building height, shadow angle, and a length factor (sun altitude).
- ***************************************************************************/
-"""
-
-__author__ = 'Julian Lindner'
-__date__ = '2026-01-26'
-__copyright__ = '(C) 2026 by Julian Lindner'
-
 import processing
 
 from qgis.PyQt import QtGui

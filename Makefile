@@ -1,28 +1,3 @@
-#/***************************************************************************
-# QuickShadow
-#
-# This plugin creates shadows from Polygons
-#							 -------------------
-#		begin				: 2026-01-26
-#		git sha				: $Format:%H$
-#		copyright			: (C) 2026 by Julian Lindner
-#		email				: QuickShadow@julianlindner.de
-# ***************************************************************************/
-#
-#/***************************************************************************
-# *																		 *
-# *   This program is free software; you can redistribute it and/or modify  *
-# *   it under the terms of the GNU General Public License as published by  *
-# *   the Free Software Foundation; either version 2 of the License, or	 *
-# *   (at your option) any later version.								   *
-# *																		 *
-# ***************************************************************************/
-
-#################################################
-# Edit the following to match your sources lists
-#################################################
-
-
 #Add iso code for any locales you want to support here (space separated)
 # default is no locales
 # LOCALES = af
@@ -52,7 +27,7 @@ PY_FILES = \
 
 UI_FILES = 
 
-EXTRAS = metadata.txt icon.png
+EXTRAS = metadata.txt icon.png icon.svg
 
 EXTRA_DIRS =
 
