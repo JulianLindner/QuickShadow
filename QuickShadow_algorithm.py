@@ -37,7 +37,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
-                self.tr('Input layer (Buildings)'),
+                self.tr('Input layer'),
                 [QgsProcessing.TypeVectorPolygon]
             )
         )
@@ -69,7 +69,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.SHADOW_LENGTH_FACTOR,
-                self.tr('Shadow Length Factor (Length = Height * Factor)'),
+                self.tr('Shadow Length Factor (Length = Height Field * Factor)'),
                 defaultValue=1.0,  
                 minValue=0.1,
             )
@@ -79,7 +79,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT,
-                self.tr('Ground Shadows')
+                self.tr('Output Layer')
             )
         )
 
