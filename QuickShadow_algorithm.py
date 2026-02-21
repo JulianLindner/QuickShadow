@@ -114,6 +114,10 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         shadow_angle = self.parameterAsDouble(parameters, self.SHADOW_ANGLE, context)
         shadow_factor = self.parameterAsDouble(parameters, self.SHADOW_LENGTH_FACTOR, context)
 
+        # Get string of Source Layer crs
+        source_layer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
+        crs_id = source_layer.crs().authid()
+
         # Calculate x and y offset (projection) from angle and factor
         # dx and dy calculate the extent of the shadow in map units.
         # QGIS trigonometry functions use radians.
@@ -126,16 +130,20 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         # buffer(..., 0): Converts the extruded multi-line/surface into a valid polygon.
         # difference: Subtract the original building's footpring
         expression = f"""
-            difference(
+            transform(
+                difference(
                     buffer(
-                    extrude(
-                        segments_to_lines(@geometry),
-                        {dx},
-                        {dy}
+                        extrude(
+                            segments_to_lines(transform($geometry, '{crs_id}', 'EPSG:3857')),
+                            {dx},
+                            {dy}
+                        ),
+                        0.0001
                     ),
-                    0
+                    transform($geometry, '{crs_id}', 'EPSG:3857')
                 ),
-                @geometry
+                'EPSG:3857',
+                '{crs_id}'
             )
         """
               
