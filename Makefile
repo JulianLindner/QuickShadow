@@ -26,9 +26,16 @@ deploy:
 # Create a zip bundle for sharing or uploading to the QGIS repo
 zip:
 	@echo "Creating $(PLUGINNAME).zip..."
-	rm -f $(PLUGINNAME).zip
-	# Created zip in the current directory 
-	zip -r $(PLUGINNAME).zip $(PY_FILES) $(EXTRAS) $$( [ -d i18n ] && echo "i18n" )
+	rm -rf /tmp/$(PLUGINNAME)
+	rm -f "$(PLUGINNAME).zip"
+	mkdir -p /tmp/$(PLUGINNAME)
+	# Copy files to temporary folder
+	cp -r $(PY_FILES) $(EXTRAS) /tmp/$(PLUGINNAME)/
+	[ -d i18n ] && cp -r i18n /tmp/$(PLUGINNAME)/ || true
+	# Use quotes around $(CURDIR) to handle the spaces in your iCloud path
+	cd /tmp && zip -r "$(CURDIR)/$(PLUGINNAME).zip" $(PLUGINNAME)
+	rm -rf /tmp/$(PLUGINNAME)
+	@echo "Zip created successfully at $(CURDIR)/$(PLUGINNAME).zip"
 
 # Remove local deployment
 clean:
