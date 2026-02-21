@@ -121,17 +121,21 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         dy = f"-( {height_value_expression} * {shadow_factor}) * cos(radians({shadow_angle}))"
 
         # Define the QGIS Geometry Expression:
-        # 1. segments_to_lines(@geometry): Converts the building polygon to its constituent line segments.
-        # 2. extrude(..., dx, dy): Extrudes each segment by the calculated x and y offset.
-        # 3. buffer(..., 0): Converts the extruded multi-line/surface into a valid polygon.
+        # segments_to_lines(@geometry): Converts the building polygon to its constituent line segments.
+        # extrude(..., dx, dy): Extrudes each segment by the calculated x and y offset.
+        # buffer(..., 0): Converts the extruded multi-line/surface into a valid polygon.
+        # difference: Subtract the original building's footpring
         expression = f"""
-            buffer( 
-                extrude(
-                    segments_to_lines(@geometry), 
-                    {dx}, 
-                    {dy}
+            difference(
+                    buffer(
+                    extrude(
+                        segments_to_lines(@geometry),
+                        {dx},
+                        {dy}
+                    ),
+                    0
                 ),
-                0
+                @geometry
             )
         """
               
@@ -208,23 +212,23 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         if temp_shadow_id is None:
             return {}
 
-        # 4. SUBTRACT Building Area: Run 'native:difference'
-        feedback.pushInfo("Subtracting building footprints from shadows...")
-        diff_params = {
-            'INPUT': temp_shadow_id,
-            'OVERLAY': parameters[self.INPUT],
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
+        # # 4. SUBTRACT Building Area: Run 'native:difference'
+        # feedback.pushInfo("Subtracting building footprints from shadows...")
+        # diff_params = {
+        #     'INPUT': temp_shadow_id,
+        #     'OVERLAY': parameters[self.INPUT],
+        #     'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        # }
         
-        diff_result = processing.run(
-            'native:difference',
-            diff_params,
-            context=context,
-            feedback=feedback,
-            is_child_algorithm=True
-        )
+        # diff_result = processing.run(
+        #     'native:difference',
+        #     diff_params,
+        #     context=context,
+        #     feedback=feedback,
+        #     is_child_algorithm=True
+        # )
         
-        final_temp_layer = context.getMapLayer(diff_result['OUTPUT'])
+        final_temp_layer = QgsProcessingUtils.mapLayerFromString(temp_shadow_id, context)
 
         # 5. Handle the Final Output Sink
         (sink_main, dest_id_main) = self.parameterAsSink(
