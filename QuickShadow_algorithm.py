@@ -192,16 +192,16 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         Calculates shadows and subtracts the original building footprints.
         """
        
-        # 1. Retrieve and validate input source layer
+        # Retrieve and validate input source layer
         source = self.parameterAsSource(parameters, self.INPUT, context)
         if source is None:
             feedback.reportError("Could not load source layer for INPUT.", True)
             return {} 
 
-        # 2. Determine the height value expression
+        # Determine the height value expression
         height_value_expression = self._get_height_expression(parameters, context, feedback)
             
-        # 3. Run the 'Geometry by Expression' to get the "full" shadow shapes
+        # Run the 'Geometry by Expression' to get the "full" shadow shapes
         temp_shadow_id = self._run_geometry_by_expression(
             parameters, 
             context, 
@@ -211,26 +211,10 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         
         if temp_shadow_id is None:
             return {}
-
-        # # 4. SUBTRACT Building Area: Run 'native:difference'
-        # feedback.pushInfo("Subtracting building footprints from shadows...")
-        # diff_params = {
-        #     'INPUT': temp_shadow_id,
-        #     'OVERLAY': parameters[self.INPUT],
-        #     'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        # }
-        
-        # diff_result = processing.run(
-        #     'native:difference',
-        #     diff_params,
-        #     context=context,
-        #     feedback=feedback,
-        #     is_child_algorithm=True
-        # )
         
         final_temp_layer = QgsProcessingUtils.mapLayerFromString(temp_shadow_id, context)
 
-        # 5. Handle the Final Output Sink
+        # Handle the Final Output Sink
         (sink_main, dest_id_main) = self.parameterAsSink(
             parameters, self.OUTPUT,
             context, final_temp_layer.fields(), final_temp_layer.wkbType(), final_temp_layer.sourceCrs()
