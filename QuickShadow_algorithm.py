@@ -137,7 +137,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
                             {dx},
                             {dy}
                         ),
-                        0.0001
+                        0
                     ),
                     transform($geometry, '{crs_id}', 'EPSG:3857')
                 ),
@@ -210,8 +210,10 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         id_field_name = "id"
         fields_to_retain = [height_field_name, id_field_name]
         all_field_names = [f.name() for f in source.fields()]
+        
 
         # handing over either id + height field or only id
+        feedback.pushInfo("Cleaning up the fields of the input layer.")
         if height_field_name in all_field_names and id_field_name in all_field_names:
             clean_res = processing.run("native:retainfields", {
                 'INPUT': parameters[self.INPUT],
