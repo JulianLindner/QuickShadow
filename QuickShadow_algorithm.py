@@ -70,6 +70,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.SHADOW_LENGTH_FACTOR,
                 self.tr('Shadow Length Factor (Length = Height Field * Factor)'),
+                type=QgsProcessingParameterNumber.Double,
                 defaultValue=1.0,  
                 minValue=0.1,
             )
