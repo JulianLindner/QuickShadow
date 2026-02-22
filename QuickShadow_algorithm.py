@@ -101,8 +101,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             feedback.pushInfo(f"Using field: {height_field_name} for shadow calculation.")
         else:
             # Use a default height if no field is provided
-            height_value_expression = "1.0"
-            feedback.pushInfo("No height field selected. Using a default height value of 1.0.")
+            height_value_expression = "5"
             
         return height_value_expression
 
