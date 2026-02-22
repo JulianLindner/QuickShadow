@@ -206,12 +206,11 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             feedback.reportError("Could not load source layer for INPUT.", True)
             return {} 
         
-        # get name of height field
+        # get name of height field and id
         height_field_name = self.parameterAsString(parameters, self.HEIGHT_FIELD, context)
         id_field_name = "id"
         fields_to_retain = [height_field_name, id_field_name]
         all_field_names = [f.name() for f in source.fields()]
-        feedback.pushInfo(f"Available fields: {', '.join(all_field_names)}")
 
         # handing over either id + height field or only id
         if height_field_name in all_field_names and id_field_name in all_field_names:
