@@ -106,7 +106,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             
         return height_value_expression
 
-    def _run_geometry_by_expression(self, parameters, context, feedback, height_value_expression):
+    def _run_geometry_by_expression(self, parameters, context, feedback, height_value_expression, clean_layer_path):
         """
         Constructs and executes the QGIS 'qgis:geometrybyexpression' algorithm 
         to create the raw shadow polygons.
@@ -149,7 +149,7 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
               
         # Define the parameters for the 'Geometry by Expression' algorithm
         alg_params = {
-            'INPUT': parameters[self.INPUT],
+            'INPUT': clean_layer_path,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
             'EXPRESSION': expression,
             'OUTPUT_GEOMETRY': QgsProcessing.TypeVectorPolygon
@@ -205,6 +205,30 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
         if source is None:
             feedback.reportError("Could not load source layer for INPUT.", True)
             return {} 
+        
+        # get name of height field
+        height_field_name = self.parameterAsString(parameters, self.HEIGHT_FIELD, context)
+        id_field_name = "id"
+        fields_to_retain = [height_field_name, id_field_name]
+        all_field_names = [f.name() for f in source.fields()]
+        feedback.pushInfo(f"Available fields: {', '.join(all_field_names)}")
+
+        # handing over either id + height field or only id
+        if height_field_name in all_field_names and id_field_name in all_field_names:
+            clean_res = processing.run("native:retainfields", {
+                'INPUT': parameters[self.INPUT],
+                'FIELDS': fields_to_retain,
+                'OUTPUT': 'memory:clean_layer'
+            }, context=context, feedback=feedback)
+        else:
+            clean_res = processing.run("native:retainfields", {
+                'INPUT': parameters[self.INPUT],
+                'FIELDS': id_field_name,
+                'OUTPUT': 'memory:clean_layer'
+            }, context=context, feedback=feedback)
+
+        clean_layer_path = clean_res['OUTPUT']
+
 
         # Determine the height value expression
         height_value_expression = self._get_height_expression(parameters, context, feedback)
@@ -214,7 +238,8 @@ class QuickShadowAlgorithm(QgsProcessingAlgorithm):
             parameters, 
             context, 
             feedback, 
-            height_value_expression
+            height_value_expression,
+            clean_layer_path
         )
         
         if temp_shadow_id is None:
