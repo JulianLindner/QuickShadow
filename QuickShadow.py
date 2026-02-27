@@ -15,11 +15,11 @@ class QuickShadowPlugin(object):
         self.action = None
 
     def initGui(self):
-        # 1. Register the processing tools
+        # Register the processing tools
         self.provider = QuickShadowProvider()
         QgsApplication.processingRegistry().addProvider(self.provider)
 
-        # 2. Setup the Button
+        # Setup the Button
         icon_path = os.path.join(cmd_folder, 'icon.svg')
         
         # Use a system fallback icon if your svg isn't found
@@ -36,16 +36,14 @@ class QuickShadowPlugin(object):
         
         self.action.triggered.connect(self.run_algorithm)
 
-        # 3. Add to UI
+        # Add to UI
         self.iface.addVectorToolBarIcon(self.action)
         self.iface.addPluginToVectorMenu("QuickShadow", self.action)
         
-        # This will show a yellow bar if it actually reaches this point
         self.iface.messageBar().pushMessage("QuickShadow", "Plugin Initialized", level=0)
 
     def run_algorithm(self):
         import processing
-        # Make sure this string is exactly "provider_id:algo_name"
         alg_id = "quickshadow:Create cast shadow"
         processing.execAlgorithmDialog(alg_id, {})
 
