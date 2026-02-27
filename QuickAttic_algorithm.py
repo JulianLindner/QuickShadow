@@ -24,14 +24,9 @@ class QuickAtticAlgorithm(QgsProcessingAlgorithm):
         return 'vector_polygon_scripts'
 
     def initAlgorithm(self, config=None):
-        # Auch wenn wir nichts berechnen, braucht QGIS oft eine Definition
         pass
 
-    def processAlgorithm(self, parameters, context, feedback):
-        # Hier passiert die Magie
-        print("Hello World")
-        
-        # In QGIS ist es sauberer, das Feedback-Objekt für Logs zu nutzen:
-        feedback.pushInfo("Hello World aus dem Feedback-Log!")
+    def processAlgorithm(self, parameters, context, feedback):        
+        feedback.pushInfo("Hello World!")
         
         return {}
