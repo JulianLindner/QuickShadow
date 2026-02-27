@@ -1,6 +1,6 @@
 # Basic Plugin Metadata
 PLUGINNAME = QuickShadow
-PY_FILES = __init__.py QuickShadow.py QuickShadow_provider.py QuickShadow_algorithm.py
+PY_FILES = __init__.py QuickShadow.py QuickShadow_provider.py QuickShadow_algorithm.py QuickAttic_algorithm.py 
 EXTRAS = metadata.txt icon.svg
 LOCALES = en
 

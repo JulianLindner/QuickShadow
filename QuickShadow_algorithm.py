@@ -14,7 +14,7 @@ from qgis.core import (QgsProcessing,
 from qgis import utils
 
 
-class QuickShadowAlgorithm(QgsProcessingAlgorithm):
+class ShadowAlgorithm(QgsProcessingAlgorithm):
     """
     QGIS Processing algorithm to generate simple ground shadow polygons from 
     input building polygons.
